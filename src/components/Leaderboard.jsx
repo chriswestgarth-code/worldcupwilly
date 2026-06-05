@@ -117,7 +117,7 @@ export default function Leaderboard() {
               }}>
                 {medal && <span style={{ marginRight: '10px' }}>{medal.emoji}</span>}
                 {owner.name}
-              }</h2>
+              </h2>
               
               {/* Roster Badges (Cleaned up) */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
