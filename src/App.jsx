@@ -1,6 +1,7 @@
 import AdminPanel from './components/AdminPanel';
 import Leaderboard from './components/Leaderboard';
 import SeedButton from './components/SeedButton';
+import HeroBanner from './components/HeroBanner';
 
 function App() {
   return (
