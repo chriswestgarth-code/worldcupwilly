@@ -1,91 +1,170 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+// src/components/Leaderboard.jsx
+import { useEffect, useState } from 'react';
+import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+import { flagMap } from '../data/flagMap';
 
 export default function Leaderboard() {
-  const [owners, setOwners] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [rankedOwners, setRankedOwners] = useState([]);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'teams'), (snapshot) => {
-      const teamsData = snapshot.docs.map(doc => doc.data());
-      
-      // 1. Group by Owner and Calculate Points
-      const ownerMap = {};
-      
-      teamsData.forEach(team => {
-        // Run your scoring system
-        const pts = (team.wins * 3) + (team.ties * 1) + (team.cleanSheets * 1) - (team.redCards * 1);
-        
-        if (!ownerMap[team.owner]) {
-          ownerMap[team.owner] = { 
-            name: team.owner, 
-            totalPoints: 0, 
-            roster: [] 
-          };
-        }
-        
-        ownerMap[team.owner].totalPoints += pts;
-        ownerMap[team.owner].roster.push(team.name);
+    // 1. Listen to the 48 teams in real-time
+    const q = query(collection(db, 'teams'));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const allTeams = [];
+      querySnapshot.forEach((doc) => {
+        allTeams.push(doc.data());
       });
 
-      // 2. Convert to Array and Sort by Points
-      const sortedOwners = Object.values(ownerMap).sort((a, b) => b.totalPoints - a.totalPoints);
-      
-      setOwners(sortedOwners);
-      setLoading(false);
+      // 2. Algorithm: Calculate owner points
+      const ownerPoints = {};
+      allTeams.forEach((team) => {
+        const ownerName = team.owner || 'Unassigned';
+        
+        const totalPoints = 
+          (team.wins * 3) + 
+          (team.ties * 1) + 
+          (team.cleanSheets * 1) - 
+          (team.redCards * 1);
+
+        if (!ownerPoints[ownerName]) {
+          ownerPoints[ownerName] = { total: 0, roster: [] };
+        }
+        ownerPoints[ownerName].total += totalPoints;
+        // Don't list 'Unassigned' teams on the leaderboard
+        if (ownerName !== 'Unassigned') {
+          ownerPoints[ownerName].roster.push(team.name);
+        }
+      });
+
+      // 3. Convert to array and sort by points
+      const sortedOwners = Object.entries(ownerPoints)
+        .map(([name, data]) => ({
+          name,
+          total: data.total,
+          roster: data.roster.sort() // Sort roster alphabetically
+        }))
+        // Hide "Unassigned" from the main display
+        .filter(owner => owner.name !== 'Unassigned') 
+        .sort((a, b) => b.total - a.total);
+
+      setRankedOwners(sortedOwners);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Visual Setup for the top 3
-  const getRankStyle = (index) => {
-    if (index === 0) return { bg: '#FFD700', color: 'black', icon: '🏆' }; // Gold
-    if (index === 1) return { bg: '#C0C0C0', color: 'black', icon: '🥈' }; // Silver
-    if (index === 2) return { bg: '#CD7F32', color: 'white', icon: '🥄' }; // Bronze Spoon
-    return { bg: '#2a2a2a', color: 'white', icon: '' }; // Everyone else
+  // Medal Logic
+  const getMedal = (index) => {
+    if (index === 0) return { emoji: "🥇", color: "#FFD700" }; // Gold
+    if (index === 1) return { emoji: "🥈", color: "#C0C0C0" }; // Silver
+    if (index === 2) return { emoji: "🥉", color: "#CD7F32" }; // Bronze
+    return null;
   };
 
-  if (loading) return <h2 style={{ color: 'white', textAlign: 'center' }}>Loading Pitch...</h2>;
-
   return (
-    <div style={{ fontFamily: '"Montserrat", sans-serif' }}>
-      
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        {owners.map((owner, index) => {
-          const rank = getRankStyle(index);
-          
-          return (
-            <div key={owner.name} style={{ 
-              background: rank.bg, 
-              color: rank.color,
-              padding: '20px', 
-              borderRadius: '12px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+    <div style={{ fontFamily: '"Montserrat", sans-serif', paddingBottom: '40px' }}>
+      {rankedOwners.map((owner, index) => {
+        const medal = getMedal(index);
+        
+        return (
+          <div key={owner.name} style={{
+            // --- THE PREMIUM GLASSMORPHISM STYLE ---
+            background: 'rgba(255, 255, 255, 0.03)', // Highly translucent white
+            backdropFilter: 'blur(10px)', // The core frosted glass effect
+            WebkitBackdropFilter: 'blur(10px)', // Safari support
+            
+            // Layout and Spacing
+            display: 'flex',
+            alignItems: 'center',
+            padding: '20px 30px',
+            marginBottom: '15px',
+            borderRadius: '12px',
+            
+            // Borders and Highlights
+            border: '1px solid rgba(255, 255, 255, 0.08)', // Soft global border
+            borderTop: medal ? `3px solid ${medal.color}` : '1px solid rgba(255, 255, 255, 0.08)', // Medal color highlight on top
+            
+            // Shadows for depth
+            boxShadow: medal 
+              ? `0 10px 30px -10px ${medal.color}40` // Subtle glow matching medal
+              : '0 8px 32px 0 rgba(0, 0, 0, 0.37)'
+          }}>
+            
+            {/* Rank Number (Broadcast Style) */}
+            <div style={{
+              fontFamily: '"Impact", sans-serif',
+              fontSize: '48px',
+              fontWeight: 'bold',
+              color: medal ? medal.color : 'rgba(255,255,255,0.2)',
+              width: '60px',
+              textAlign: 'center',
+              marginRight: '20px',
+              textShadow: medal ? `0 0 15px ${medal.color}` : 'none' // Neon rank glow
             }}>
-              
-              <div style={{ flex: 1 }}>
-                <h2 style={{ margin: 0, fontSize: '28px', textTransform: 'uppercase' }}>
-                  {index + 1}. {owner.name} {rank.icon}
-                </h2>
-                <p style={{ margin: '5px 0 0 0', fontSize: '14px', opacity: 0.8 }}>
-                  {owner.roster.join(', ')}
-                </p>
-              </div>
-
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '42px', fontWeight: '900' }}>{owner.totalPoints}</span>
-                <span style={{ fontSize: '16px', display: 'block', textTransform: 'uppercase', letterSpacing: '2px' }}>PTS</span>
-              </div>
-              
+              {index + 1}
             </div>
-          );
-        })}
-      </div>
+
+            {/* Owner Info and Roster */}
+            <div style={{ flex: 1 }}>
+              <h2 style={{ 
+                margin: 0, 
+                fontSize: '24px', 
+                textTransform: 'uppercase', 
+                letterSpacing: '1px',
+                fontWeight: 700,
+                color: medal ? '#ffffff' : 'rgba(255,255,255,0.7)'
+              }}>
+                {medal && <span style={{ marginRight: '10px' }}>{medal.emoji}</span>}
+                {owner.name}
+              }</h2>
+              
+              {/* Roster Badges (Cleaned up) */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+                {owner.roster.map(teamName => (
+                  <span key={teamName} style={{ 
+                    background: 'rgba(0, 0, 0, 0.3)', // Darker badge bg
+                    padding: '6px 12px', 
+                    borderRadius: '20px', 
+                    fontSize: '13px', 
+                    fontWeight: 500,
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: 'rgba(255,255,255,0.9)'
+                  }}>
+                    {flagMap[teamName] || "🏳️"} {teamName}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Total Points (Massive, Imposing) */}
+            <div style={{ textAlign: 'center', marginLeft: '30px' }}>
+              <div style={{ 
+                fontFamily: '"Impact", sans-serif', // Broadcast typography
+                fontSize: '72px', // Massive size
+                color: '#ccff00', // Neon Green
+                lineHeight: 1,
+                textShadow: '0 0 20px rgba(204, 255, 0, 0.5)' // Soft neon glow
+              }}>
+                {owner.total}
+              </div>
+              <div style={{ 
+                fontSize: '12px', 
+                textTransform: 'uppercase', 
+                letterSpacing: '3px', 
+                opacity: 0.5, 
+                marginTop: '-5px' 
+              }}>
+                TOTAL PTS
+              </div>
+            </div>
+
+          </div>
+        );
+      })}
     </div>
   );
 }
